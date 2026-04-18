@@ -22,7 +22,9 @@ WORKDIR /app
 
 COPY ./pyproject.toml /app/pyproject.toml
 COPY ./uv.lock /app/uv.lock
-RUN uv sync --frozen --no-dev --no-install-project --no-editable
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project --no-editable
 
 COPY src/mcp_server_milvus/server.py /app/server.py
 
