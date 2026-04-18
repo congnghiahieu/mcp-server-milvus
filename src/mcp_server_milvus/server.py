@@ -15,6 +15,8 @@ from pymilvus import (
     RRFRanker,
 )
 
+load_dotenv()
+
 logger = logging.getLogger(__name__)
 
 
@@ -712,6 +714,7 @@ class MilvusContext:
 async def server_lifespan(server: FastMCP) -> AsyncIterator[MilvusContext]:
     """Manage application lifecycle for Milvus connector."""
     config = server.config
+
     logger.info(
         "Initializing Milvus connector (uri=%s, db=%s)",
         config.get("milvus_uri"),
@@ -736,7 +739,17 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[MilvusContext]:
         logger.info("Milvus MCP server lifespan ended")
 
 
-mcp = FastMCP(name="Milvus", lifespan=server_lifespan)
+FASTMCP_HOST = os.getenv("FASTMCP_HOST", "127.0.0.1")
+FASTMCP_PORT = int(os.getenv("FASTMCP_PORT", 8000))
+FASTMCP_LOG_LEVEL = os.getenv("FASTMCP_LOG_LEVEL", "INFO")
+
+mcp = FastMCP(
+    name="Milvus",
+    lifespan=server_lifespan,
+    host=FASTMCP_HOST,
+    port=FASTMCP_PORT,
+    log_level=FASTMCP_LOG_LEVEL,
+)
 
 
 @mcp.tool()
@@ -1271,7 +1284,6 @@ def parse_arguments():
 
 
 def main():
-    load_dotenv()
     args = parse_arguments()
 
     log_output = os.environ.get("MCP_LOG_OUTPUT", args.log_output).lower()
@@ -1289,9 +1301,6 @@ def main():
         log_max_bytes=log_max_bytes,
         log_backup_count=log_backup_count,
     )
-    logger.info(
-        "Starting Milvus MCP server (output=%s, level=%s)", log_output, log_level
-    )
 
     mcp.config = {
         "milvus_uri": os.environ.get("MILVUS_URI", args.milvus_uri),
@@ -1304,13 +1313,16 @@ def main():
     mcp_transport_mode = os.environ.get(
         "MCP_TRANSPORT_MODE", args.mcp_transport_mode
     ).lower()
+
     logger.info(
-        "Running MCP server with transport=%s, host=%s (FASTMCP_HOST), port=%s (FASTMCP_PORT), log_level=%s (FASTMCP_LOG_LEVEL)",
+        "Running MCP server with transport=%s, host=%s, port=%s, log_level=%s, output=%s",
         mcp_transport_mode,
         mcp.settings.host,
         mcp.settings.port,
         mcp.settings.log_level,
+        log_output,
     )
+
     mcp.run(mcp_transport_mode)
 
 
