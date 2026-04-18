@@ -1022,12 +1022,13 @@ def main():
         "milvus_token": os.environ.get("MILVUS_TOKEN", args.milvus_token),
         "db_name": os.environ.get("MILVUS_DB", args.milvus_db),
     }
+
+    # Set host, port, log level via environment variables of FastMCP: FASTMCP_HOST, FASTMCP_PORT, FASTMCP_LOG_LEVEL
+
+    transport = "stdio"
     if args.sse:
-        mcp.settings.port = args.port
-        mcp.settings.host = "localhost"
-        mcp.run(transport="sse")
-    else:
-        mcp.run()
+        transport = "sse"
+    mcp.run(transport)
 
 
 if __name__ == "__main__":
