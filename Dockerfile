@@ -1,7 +1,12 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+ENV PATH="/app/.venv/bin/:$PATH" \
+    PYTHONPATH="/app/" \
+    LANG=C.UTF-8 \
     PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONHASHSEED=random \
     PIP_NO_CACHE_DIR=1 \
     MILVUS_URI=http://localhost:19530 \
     MILVUS_TOKEN= \
@@ -14,12 +19,12 @@ WORKDIR /app
 
 COPY ./pyproject.toml /app/pyproject.toml
 COPY ./uv.lock /app/uv.lock
-RUN uv sync --frozen --no-dev --no-editable --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project --no-editable
 
 COPY src/mcp_server_milvus/server.py /app/server.py
 
 EXPOSE 8000
 
-ENTRYPOINT ["uv", "run"]
+ENTRYPOINT ["python"]
 
 CMD ["server.py"]

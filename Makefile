@@ -1,6 +1,6 @@
 IMAGE_USER ?= hieucien
 IMAGE_NAME ?= mcp-server-milvus
-IMAGE_VERSION ?= 0.1.1-patched-v1
+IMAGE_VERSION ?= 0.1.1-patched-v2
 IMAGE ?= $(IMAGE_USER)/$(IMAGE_NAME):$(IMAGE_VERSION)
 
 lint:

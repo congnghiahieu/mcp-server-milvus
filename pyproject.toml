@@ -7,7 +7,6 @@ requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=2.14.1",
     "pymilvus>=2.5.1",
-    "click>=8.0.0",
     "python-dotenv>=1.0.0",
 ]
 

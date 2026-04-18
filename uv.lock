@@ -794,7 +794,6 @@ name = "mcp-server-milvus"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
-    { name = "click" },
     { name = "fastmcp" },
     { name = "pymilvus" },
     { name = "python-dotenv" },
@@ -807,7 +806,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.0.0" },
     { name = "fastmcp", specifier = ">=2.14.1" },
     { name = "pymilvus", specifier = ">=2.5.1" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
