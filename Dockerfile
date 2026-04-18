@@ -1,6 +1,6 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-ENV PATH="/app/.venv/bin/:$PATH" \
+ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app/" \
     LANG=C.UTF-8 \
     PYTHONUNBUFFERED=1 \
@@ -8,6 +8,9 @@ ENV PATH="/app/.venv/bin/:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONHASHSEED=random \
     PIP_NO_CACHE_DIR=1 \
+    MCP_TRANSPORT_MODE=stdio \
+    MCP_LOG_OUTPUT=console \
+    MCP_LOG_LEVEL=INFO \
     MILVUS_URI=http://localhost:19530 \
     MILVUS_TOKEN= \
     MILVUS_DB=default \

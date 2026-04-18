@@ -1,7 +1,9 @@
 import argparse
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from typing import Any, AsyncIterator, Optional
 
 from dotenv import load_dotenv
@@ -12,6 +14,37 @@ from pymilvus import (
     MilvusClient,
     RRFRanker,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def setup_logging(
+    log_output: str = "file",
+    log_file: str = "milvus_mcp_server.log",
+    log_level: str = "INFO",
+    log_max_bytes: int = 10 * 1024 * 1024,
+    log_backup_count: int = 5,
+) -> None:
+    """Configure application logging to console or rotating file."""
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    log_format = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+
+    if log_output.lower() == "console":
+        handler = logging.StreamHandler()
+    else:
+        handler = RotatingFileHandler(
+            log_file,
+            maxBytes=log_max_bytes,
+            backupCount=log_backup_count,
+            encoding="utf-8",
+        )
+
+    logging.basicConfig(
+        level=level,
+        format=log_format,
+        handlers=[handler],
+        force=True,
+    )
 
 
 class MilvusConnector:
@@ -25,15 +58,23 @@ class MilvusConnector:
     async def list_collections(self) -> list[str]:
         """List all collections in the database."""
         try:
+            logger.debug("Listing collections")
             return self.client.list_collections()
         except Exception as e:
+            logger.exception("Failed to list collections")
             raise ValueError(f"Failed to list collections: {str(e)}")
 
     async def get_collection_info(self, collection_name: str) -> dict:
         """Get detailed information about a collection."""
         try:
+            logger.debug(
+                "Getting collection info", extra={"collection_name": collection_name}
+            )
             return self.client.describe_collection(collection_name)
         except Exception as e:
+            logger.exception(
+                "Failed to get collection info for collection '%s'", collection_name
+            )
             raise ValueError(f"Failed to get collection info: {str(e)}")
 
     async def search_collection(
@@ -55,6 +96,11 @@ class MilvusConnector:
             drop_ratio: Proportion of low-frequency terms to ignore (0.0-1.0)
         """
         try:
+            logger.debug(
+                "Running text search on collection '%s' (limit=%s)",
+                collection_name,
+                limit,
+            )
             search_params = {"params": {"drop_ratio_search": drop_ratio}}
 
             results = self.client.search(
@@ -67,6 +113,7 @@ class MilvusConnector:
             )
             return results
         except Exception as e:
+            logger.exception("Search failed for collection '%s'", collection_name)
             raise ValueError(f"Search failed: {str(e)}")
 
     async def query_collection(
@@ -78,6 +125,12 @@ class MilvusConnector:
     ) -> list[dict]:
         """Query collection using filter expressions."""
         try:
+            logger.debug(
+                "Querying collection '%s' with filter '%s' (limit=%s)",
+                collection_name,
+                filter_expr,
+                limit,
+            )
             return self.client.query(
                 collection_name=collection_name,
                 filter=filter_expr,
@@ -85,6 +138,7 @@ class MilvusConnector:
                 limit=limit,
             )
         except Exception as e:
+            logger.exception("Query failed for collection '%s'", collection_name)
             raise ValueError(f"Query failed: {str(e)}")
 
     async def vector_search(
@@ -110,6 +164,12 @@ class MilvusConnector:
             filter_expr: Optional filter expression
         """
         try:
+            logger.debug(
+                "Running vector search on collection '%s' (field=%s, limit=%s)",
+                collection_name,
+                vector_field,
+                limit,
+            )
             search_params = {"metric_type": metric_type, "params": {"nprobe": 10}}
 
             results = self.client.search(
@@ -123,6 +183,9 @@ class MilvusConnector:
             )
             return results
         except Exception as e:
+            logger.exception(
+                "Vector search failed for collection '%s'", collection_name
+            )
             raise ValueError(f"Vector search failed: {str(e)}")
 
     async def text_similarity_search(
@@ -148,6 +211,12 @@ class MilvusConnector:
             filter_expr: Optional filter expression
         """
         try:
+            logger.debug(
+                "Running text similarity search on collection '%s' (field=%s, limit=%s)",
+                collection_name,
+                anns_field,
+                limit,
+            )
             search_params = {"metric_type": metric_type, "params": {"nprobe": 10}}
 
             results = self.client.search(
@@ -161,6 +230,9 @@ class MilvusConnector:
             )
             return results
         except Exception as e:
+            logger.exception(
+                "Text similarity search failed for collection '%s'", collection_name
+            )
             raise ValueError(f"Text similarity search failed: {str(e)}")
 
     async def hybrid_search(
@@ -188,6 +260,13 @@ class MilvusConnector:
             filter_expr: Optional filter expression
         """
         try:
+            logger.debug(
+                "Running hybrid search on collection '%s' (text_field=%s, vector_field=%s, limit=%s)",
+                collection_name,
+                text_field,
+                vector_field,
+                limit,
+            )
             sparse_params = {"params": {"nprobe": 10}}
             dense_params = {"params": {"drop_ratio_build": 0.2}}
             # BM25 search request
@@ -217,6 +296,9 @@ class MilvusConnector:
             return results
 
         except Exception as e:
+            logger.exception(
+                "Hybrid search failed for collection '%s'", collection_name
+            )
             raise ValueError(f"Hybrid search failed: {str(e)}")
 
     async def create_collection(
@@ -254,6 +336,7 @@ class MilvusConnector:
             **kwargs: Additional parameters for the collection creation
         """
         try:
+            logger.info("Creating collection '%s'", collection_name)
             # Check if collection already exists
             if collection_name in self.client.list_collections():
                 raise ValueError(f"Collection '{collection_name}' already exists")
@@ -297,6 +380,7 @@ class MilvusConnector:
 
             return True
         except Exception as e:
+            logger.exception("Failed to create collection '%s'", collection_name)
             raise ValueError(f"Failed to create collection: {str(e)}")
 
     async def insert_data(
@@ -310,9 +394,11 @@ class MilvusConnector:
             data: List of dictionaries, each representing a record
         """
         try:
+            logger.info("Inserting %s record(s) into '%s'", len(data), collection_name)
             result = self.client.insert(collection_name=collection_name, data=data)
             return result
         except Exception as e:
+            logger.exception("Insert failed for collection '%s'", collection_name)
             raise ValueError(f"Insert failed: {str(e)}")
 
     async def delete_entities(
@@ -326,11 +412,17 @@ class MilvusConnector:
             filter_expr: Filter expression to select entities to delete
         """
         try:
+            logger.info(
+                "Deleting entities from '%s' with filter '%s'",
+                collection_name,
+                filter_expr,
+            )
             result = self.client.delete(
                 collection_name=collection_name, expr=filter_expr
             )
             return result
         except Exception as e:
+            logger.exception("Delete failed for collection '%s'", collection_name)
             raise ValueError(f"Delete failed: {str(e)}")
 
     async def get_collection_stats(self, collection_name: str) -> dict[str, Any]:
@@ -341,8 +433,10 @@ class MilvusConnector:
             collection_name: Name of collection
         """
         try:
+            logger.debug("Getting stats for collection '%s'", collection_name)
             return self.client.get_collection_stats(collection_name)
         except Exception as e:
+            logger.exception("Failed to get collection stats for '%s'", collection_name)
             raise ValueError(f"Failed to get collection stats: {str(e)}")
 
     async def multi_vector_search(
@@ -372,6 +466,12 @@ class MilvusConnector:
         try:
             if search_params is None:
                 search_params = {"metric_type": metric_type, "params": {"nprobe": 10}}
+            logger.debug(
+                "Running multi-vector search on collection '%s' (queries=%s, limit=%s)",
+                collection_name,
+                len(vectors),
+                limit,
+            )
 
             results = self.client.search(
                 collection_name=collection_name,
@@ -384,6 +484,9 @@ class MilvusConnector:
             )
             return results
         except Exception as e:
+            logger.exception(
+                "Multi-vector search failed for collection '%s'", collection_name
+            )
             raise ValueError(f"Multi-vector search failed: {str(e)}")
 
     async def create_index(
@@ -407,6 +510,12 @@ class MilvusConnector:
         try:
             if params is None:
                 params = {"nlist": 1024}
+            logger.info(
+                "Creating index on '%s.%s' (type=%s)",
+                collection_name,
+                field_name,
+                index_type,
+            )
 
             index_params = {
                 "index_type": index_type,
@@ -421,6 +530,9 @@ class MilvusConnector:
             )
             return True
         except Exception as e:
+            logger.exception(
+                "Failed to create index on '%s.%s'", collection_name, field_name
+            )
             raise ValueError(f"Failed to create index: {str(e)}")
 
     async def bulk_insert(
@@ -438,6 +550,12 @@ class MilvusConnector:
             results = []
             field_names = list(data.keys())
             total_records = len(data[field_names[0]])
+            logger.info(
+                "Bulk insert into '%s' started (records=%s, batch_size=%s)",
+                collection_name,
+                total_records,
+                batch_size,
+            )
 
             for i in range(0, total_records, batch_size):
                 batch_data = {
@@ -451,6 +569,7 @@ class MilvusConnector:
 
             return results
         except Exception as e:
+            logger.exception("Bulk insert failed for collection '%s'", collection_name)
             raise ValueError(f"Bulk insert failed: {str(e)}")
 
     async def load_collection(
@@ -464,11 +583,15 @@ class MilvusConnector:
             replica_number: Number of replicas
         """
         try:
+            logger.info(
+                "Loading collection '%s' (replicas=%s)", collection_name, replica_number
+            )
             self.client.load_collection(
                 collection_name=collection_name, replica_number=replica_number
             )
             return True
         except Exception as e:
+            logger.exception("Failed to load collection '%s'", collection_name)
             raise ValueError(f"Failed to load collection: {str(e)}")
 
     async def release_collection(self, collection_name: str) -> bool:
@@ -479,9 +602,11 @@ class MilvusConnector:
             collection_name: Name of collection to release
         """
         try:
+            logger.info("Releasing collection '%s'", collection_name)
             self.client.release_collection(collection_name=collection_name)
             return True
         except Exception as e:
+            logger.exception("Failed to release collection '%s'", collection_name)
             raise ValueError(f"Failed to release collection: {str(e)}")
 
     async def get_query_segment_info(self, collection_name: str) -> dict[str, Any]:
@@ -492,8 +617,12 @@ class MilvusConnector:
             collection_name: Name of collection
         """
         try:
+            logger.debug("Getting query segment info for '%s'", collection_name)
             return self.client.get_query_segment_info(collection_name)
         except Exception as e:
+            logger.exception(
+                "Failed to get query segment info for '%s'", collection_name
+            )
             raise ValueError(f"Failed to get query segment info: {str(e)}")
 
     async def upsert_data(
@@ -507,9 +636,11 @@ class MilvusConnector:
             data: Dictionary mapping field names to lists of values
         """
         try:
+            logger.info("Upserting data into '%s'", collection_name)
             result = self.client.upsert(collection_name=collection_name, data=data)
             return result
         except Exception as e:
+            logger.exception("Upsert failed for collection '%s'", collection_name)
             raise ValueError(f"Upsert failed: {str(e)}")
 
     async def get_index_info(
@@ -523,10 +654,12 @@ class MilvusConnector:
             field_name: Optional specific field to get index info for
         """
         try:
+            logger.debug("Getting index info for '%s'", collection_name)
             return self.client.describe_index(
                 collection_name=collection_name, index_name=field_name
             )
         except Exception as e:
+            logger.exception("Failed to get index info for '%s'", collection_name)
             raise ValueError(f"Failed to get index info: {str(e)}")
 
     async def get_collection_loading_progress(
@@ -539,15 +672,19 @@ class MilvusConnector:
             collection_name: Name of collection
         """
         try:
+            logger.debug("Getting loading progress for '%s'", collection_name)
             return self.client.get_load_state(collection_name)
         except Exception as e:
+            logger.exception("Failed to get loading progress for '%s'", collection_name)
             raise ValueError(f"Failed to get loading progress: {str(e)}")
 
     async def list_databases(self) -> list[str]:
         """List all databases in the Milvus instance."""
         try:
+            logger.debug("Listing databases")
             return self.client.list_databases()
         except Exception as e:
+            logger.exception("Failed to list databases")
             raise ValueError(f"Failed to list databases: {str(e)}")
 
     async def use_database(self, db_name: str) -> bool:
@@ -558,9 +695,11 @@ class MilvusConnector:
         """
         try:
             # Create a new client with the specified database
+            logger.info("Switching database to '%s'", db_name)
             self.client = MilvusClient(uri=self.uri, token=self.token, db_name=db_name)
             return True
         except Exception as e:
+            logger.exception("Failed to switch database to '%s'", db_name)
             raise ValueError(f"Failed to switch database: {str(e)}")
 
 
@@ -573,6 +712,11 @@ class MilvusContext:
 async def server_lifespan(server: FastMCP) -> AsyncIterator[MilvusContext]:
     """Manage application lifecycle for Milvus connector."""
     config = server.config
+    logger.info(
+        "Initializing Milvus connector (uri=%s, db=%s)",
+        config.get("milvus_uri"),
+        config.get("db_name", "default"),
+    )
 
     connector = MilvusConnector(
         uri=config.get("milvus_uri", "http://localhost:19530"),
@@ -580,10 +724,16 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[MilvusContext]:
         db_name=config.get("db_name", "default"),
     )
 
+    logger.info(
+        "Connected to Milvus (uri=%s, db=%s)",
+        config.get("milvus_uri"),
+        config.get("db_name", "default"),
+    )
+
     try:
         yield MilvusContext(connector)
     finally:
-        pass
+        logger.info("Milvus MCP server lifespan ended")
 
 
 mcp = FastMCP(name="Milvus", lifespan=server_lifespan)
@@ -609,6 +759,11 @@ async def milvus_text_search(
         drop_ratio: Proportion of low-frequency terms to ignore (0.0-1.0)
     """
     try:
+        logger.info(
+            "Tool call: milvus_text_search (collection=%s, limit=%s)",
+            collection_name,
+            limit,
+        )
         connector = ctx.request_context.lifespan_context.connector
         results = await connector.search_collection(
             collection_name=collection_name,
@@ -626,6 +781,7 @@ async def milvus_text_search(
 
         return output
     except Exception as e:
+        logger.exception("Tool failed: milvus_text_search")
         return f"Error: {str(e)}"
 
 
@@ -633,10 +789,12 @@ async def milvus_text_search(
 async def milvus_list_collections(ctx: Context) -> str:
     """List all collections in the database."""
     try:
+        logger.info("Tool call: milvus_list_collections")
         connector = ctx.request_context.lifespan_context.connector
         collections = await connector.list_collections()
         return f"Collections in database:\n{', '.join(collections)}"
     except Exception as e:
+        logger.exception("Tool failed: milvus_list_collections")
         return f"Error: {str(e)}"
 
 
@@ -658,6 +816,11 @@ async def milvus_query(
         limit: Maximum number of results
     """
     try:
+        logger.info(
+            "Tool call: milvus_query (collection=%s, limit=%s)",
+            collection_name,
+            limit,
+        )
         connector = ctx.request_context.lifespan_context.connector
         results = await connector.query_collection(
             collection_name=collection_name,
@@ -674,6 +837,7 @@ async def milvus_query(
 
         return output
     except Exception as e:
+        logger.exception("Tool failed: milvus_query")
         return f"Error: {str(e)}"
 
 
@@ -701,6 +865,12 @@ async def milvus_vector_search(
         filter_expr: Optional filter expression
     """
     try:
+        logger.info(
+            "Tool call: milvus_vector_search (collection=%s, field=%s, limit=%s)",
+            collection_name,
+            vector_field,
+            limit,
+        )
         connector = ctx.request_context.lifespan_context.connector
         results = await connector.vector_search(
             collection_name=collection_name,
@@ -718,6 +888,7 @@ async def milvus_vector_search(
 
         return output
     except Exception as e:
+        logger.exception("Tool failed: milvus_vector_search")
         return f"Error: {str(e)}"
 
 
@@ -747,6 +918,13 @@ async def milvus_hybrid_search(
         filter_expr: Optional filter expression
     """
     try:
+        logger.info(
+            "Tool call: milvus_hybrid_search (collection=%s, text_field=%s, vector_field=%s, limit=%s)",
+            collection_name,
+            text_field,
+            vector_field,
+            limit,
+        )
         connector = ctx.request_context.lifespan_context.connector
 
         results = await connector.hybrid_search(
@@ -768,6 +946,7 @@ async def milvus_hybrid_search(
 
         return output
     except Exception as e:
+        logger.exception("Tool failed: milvus_hybrid_search")
         return f"Error: {str(e)}"
 
 
@@ -795,6 +974,12 @@ async def milvus_text_similarity_search(
         filter_expr: Optional filter expression
     """
     try:
+        logger.info(
+            "Tool call: milvus_text_similarity_search (collection=%s, field=%s, limit=%s)",
+            collection_name,
+            anns_field,
+            limit,
+        )
         connector = ctx.request_context.lifespan_context.connector
         results = await connector.text_similarity_search(
             collection_name=collection_name,
@@ -812,6 +997,7 @@ async def milvus_text_similarity_search(
 
         return output
     except Exception as e:
+        logger.exception("Tool failed: milvus_text_similarity_search")
         return f"Error: {str(e)}"
 
 
@@ -848,6 +1034,9 @@ async def milvus_create_collection(
         other_kwargs: Additional keyword arguments for the collection creation
     """
     try:
+        logger.info(
+            "Tool call: milvus_create_collection (collection=%s)", collection_name
+        )
         connector = ctx.request_context.lifespan_context.connector
         await connector.create_collection(
             collection_name=collection_name,
@@ -863,6 +1052,7 @@ async def milvus_create_collection(
 
         return f"Collection '{collection_name}' created successfully"
     except Exception as e:
+        logger.exception("Tool failed: milvus_create_collection")
         return f"Error: {str(e)}"
 
 
@@ -878,11 +1068,17 @@ async def milvus_insert_data(
         data: List of dictionaries, each representing a record
     """
     try:
+        logger.info(
+            "Tool call: milvus_insert_data (collection=%s, records=%s)",
+            collection_name,
+            len(data),
+        )
         connector = ctx.request_context.lifespan_context.connector
         result = await connector.insert_data(collection_name=collection_name, data=data)
 
         return f"Data inserted into collection '{collection_name}' with result: {str(result)}"
     except Exception as e:
+        logger.exception("Tool failed: milvus_insert_data")
         return f"Error: {str(e)}"
 
 
@@ -898,6 +1094,9 @@ async def milvus_delete_entities(
         filter_expr: Filter expression to select entities to delete
     """
     try:
+        logger.info(
+            "Tool call: milvus_delete_entities (collection=%s)", collection_name
+        )
         connector = ctx.request_context.lifespan_context.connector
         result = await connector.delete_entities(
             collection_name=collection_name, filter_expr=filter_expr
@@ -905,6 +1104,7 @@ async def milvus_delete_entities(
 
         return f"Entities deleted from collection '{collection_name}' with result: {str(result)}"
     except Exception as e:
+        logger.exception("Tool failed: milvus_delete_entities")
         return f"Error: {str(e)}"
 
 
@@ -920,6 +1120,11 @@ async def milvus_load_collection(
         replica_number: Number of replicas
     """
     try:
+        logger.info(
+            "Tool call: milvus_load_collection (collection=%s, replicas=%s)",
+            collection_name,
+            replica_number,
+        )
         connector = ctx.request_context.lifespan_context.connector
         await connector.load_collection(
             collection_name=collection_name, replica_number=replica_number
@@ -927,6 +1132,7 @@ async def milvus_load_collection(
 
         return f"Collection '{collection_name}' loaded successfully with {replica_number} replica(s)"
     except Exception as e:
+        logger.exception("Tool failed: milvus_load_collection")
         return f"Error: {str(e)}"
 
 
@@ -939,11 +1145,15 @@ async def milvus_release_collection(collection_name: str, ctx: Context = None) -
         collection_name: Name of collection to release
     """
     try:
+        logger.info(
+            "Tool call: milvus_release_collection (collection=%s)", collection_name
+        )
         connector = ctx.request_context.lifespan_context.connector
         await connector.release_collection(collection_name=collection_name)
 
         return f"Collection '{collection_name}' released successfully"
     except Exception as e:
+        logger.exception("Tool failed: milvus_release_collection")
         return f"Error: {str(e)}"
 
 
@@ -951,10 +1161,12 @@ async def milvus_release_collection(collection_name: str, ctx: Context = None) -
 async def milvus_list_databases(ctx: Context = None) -> str:
     """List all databases in the Milvus instance."""
     try:
+        logger.info("Tool call: milvus_list_databases")
         connector = ctx.request_context.lifespan_context.connector
         databases = await connector.list_databases()
         return f"Databases in Milvus instance:\n{', '.join(databases)}"
     except Exception as e:
+        logger.exception("Tool failed: milvus_list_databases")
         return f"Error: {str(e)}"
 
 
@@ -967,11 +1179,13 @@ async def milvus_use_database(db_name: str, ctx: Context = None) -> str:
         db_name: Name of the database to use
     """
     try:
+        logger.info("Tool call: milvus_use_database (db_name=%s)", db_name)
         connector = ctx.request_context.lifespan_context.connector
         await connector.use_database(db_name)
 
         return f"Switched to database '{db_name}' successfully"
     except Exception as e:
+        logger.exception("Tool failed: milvus_use_database")
         return f"Error: {str(e)}"
 
 
@@ -984,16 +1198,27 @@ async def milvus_get_collection_info(collection_name: str, ctx: Context = None) 
         collection_name: Name of collection to load
     """
     try:
+        logger.info(
+            "Tool call: milvus_get_collection_info (collection=%s)", collection_name
+        )
         connector = ctx.request_context.lifespan_context.connector
         collection_info = await connector.get_collection_info(collection_name)
         info_str = json.dumps(collection_info, indent=2, default=list)
         return f"Collection information:\n{info_str}"
     except Exception as e:
+        logger.exception("Tool failed: milvus_get_collection_info")
         return f"Error: {str(e)}"
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Milvus MCP Server")
+    parser.add_argument(
+        "--mcp-transport-mode",
+        type=str,
+        default="stdio",
+        choices=["stdio", "sse", "streamable-http"],
+        help="MCP transport mode: stdio, sse, streamable-http",
+    )
     parser.add_argument(
         "--milvus-uri",
         type=str,
@@ -1010,12 +1235,63 @@ def parse_arguments():
     parser.add_argument(
         "--port", type=int, default=8000, help="Port number for SSE server"
     )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default="milvus_mcp_server.log",
+        help="Path to log file",
+    )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Log level",
+    )
+    parser.add_argument(
+        "--log-output",
+        type=str,
+        default="file",
+        choices=["console", "file"],
+        help="Log output target: console or file",
+    )
+    parser.add_argument(
+        "--log-max-bytes",
+        type=int,
+        default=10 * 1024 * 1024,
+        help="Max log file size in bytes before rotation",
+    )
+    parser.add_argument(
+        "--log-backup-count",
+        type=int,
+        default=5,
+        help="Number of rotated log files to keep",
+    )
     return parser.parse_args()
 
 
 def main():
     load_dotenv()
     args = parse_arguments()
+
+    log_output = os.environ.get("MCP_LOG_OUTPUT", args.log_output).lower()
+    log_file = os.environ.get("MCP_LOG_FILE", args.log_file)
+    log_level = os.environ.get("MCP_LOG_LEVEL", args.log_level)
+    log_max_bytes = int(os.environ.get("MCP_LOG_MAX_BYTES", args.log_max_bytes))
+    log_backup_count = int(
+        os.environ.get("MCP_LOG_BACKUP_COUNT", args.log_backup_count)
+    )
+
+    setup_logging(
+        log_output=log_output,
+        log_file=log_file,
+        log_level=log_level,
+        log_max_bytes=log_max_bytes,
+        log_backup_count=log_backup_count,
+    )
+    logger.info(
+        "Starting Milvus MCP server (output=%s, level=%s)", log_output, log_level
+    )
 
     mcp.config = {
         "milvus_uri": os.environ.get("MILVUS_URI", args.milvus_uri),
@@ -1025,10 +1301,17 @@ def main():
 
     # Set host, port, log level via environment variables of FastMCP: FASTMCP_HOST, FASTMCP_PORT, FASTMCP_LOG_LEVEL
 
-    transport = "stdio"
-    if args.sse:
-        transport = "sse"
-    mcp.run(transport)
+    mcp_transport_mode = os.environ.get(
+        "MCP_TRANSPORT_MODE", args.mcp_transport_mode
+    ).lower()
+    logger.info(
+        "Running MCP server with transport=%s, host=%s (FASTMCP_HOST), port=%s (FASTMCP_PORT), log_level=%s (FASTMCP_LOG_LEVEL)",
+        mcp_transport_mode,
+        mcp.settings.host,
+        mcp.settings.port,
+        mcp.settings.log_level,
+    )
+    mcp.run(mcp_transport_mode)
 
 
 if __name__ == "__main__":
