@@ -197,13 +197,13 @@ Overwrite the `mcp.json` file with the following content:
 
    ```json
    {
-       "mcpServers": {
-         "milvus-sse": {
-           "url": "http://your_sse_host:port/sse",
-           "disabled": false,
-           "autoApprove": []
-         }
+     "mcpServers": {
+       "milvus-sse": {
+         "url": "http://your_sse_host:port/sse",
+         "disabled": false,
+         "autoApprove": []
        }
+     }
    }
    ```
 
@@ -227,13 +227,13 @@ The server provides the following tools:
 ### Search and Query Operations
 
 - `milvus_text_search`: Search for documents using full text search
-
   - Parameters:
     - `collection_name`: Name of collection to search
     - `query_text`: Text to search for
     - `limit`: The maximum number of results to return (default: 5)
     - `output_fields`: Fields to include in results
     - `drop_ratio`: Proportion of low-frequency terms to ignore (0.0-1.0)
+
 - `milvus_vector_search`: Perform vector similarity search on a collection
   - Parameters:
     - `collection_name`: Name of collection to search
@@ -275,7 +275,6 @@ The server provides the following tools:
 - `milvus_list_collections`: List all collections in the database
 
 - `milvus_create_collection`: Create a new collection with quick setup or customized schema
-
   - Parameters:
     - `collection_name`: Name for the new collection
     - `auto_id`: whether to auto generate id, default to True
@@ -284,16 +283,15 @@ The server provides the following tools:
     - `vector_field_name`: name of the vector field, default to "vector"; for quick setup and will be ignored if `field_schema` is provided
     - `metric_type`: metric type, default to "COSINE"; for quick setup and will be ignored if `field_schema` is provided
     - `field_schema`: List of field schema, each element is a dictionary with the following keys:
-        - `name`: name of the field
-        - `type`: type of the field
+      - `name`: name of the field
+      - `type`: type of the field
     - `index_params`: Optional list of index parameters, each element is a dictionary with the following keys:
-        - `field_name`: name of the field to index
-        - `index_type`: index type
-        - `**kwargs`: other optional index parameters
+      - `field_name`: name of the field to index
+      - `index_type`: index type
+      - `**kwargs`: other optional index parameters
     - `other_kwargs`: Additional keyword arguments for the collection creation
 
 - `milvus_load_collection`: Load a collection into memory for search and query
-
   - Parameters:
     - `collection_name`: Name of collection to load
     - `replica_number`: Number of replicas (default: 1)
@@ -304,12 +302,11 @@ The server provides the following tools:
 
 - `milvus_get_collection_info`: Lists detailed information like schema, properties, collection ID, and other metadata of a specific collection.
   - Parameters:
-    - `collection_name`:  Name of the collection to get detailed information about
+    - `collection_name`: Name of the collection to get detailed information about
 
 ### Data Operations
 
 - `milvus_insert_data`: Insert data into a collection
-
   - Parameters:
     - `collection_name`: Name of collection
     - `data`: Dictionary mapping field names to lists of values

@@ -1,14 +1,15 @@
 import argparse
+import json
 import os
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional, List
+from typing import Any, AsyncIterator, Optional
+
 from dotenv import load_dotenv
-import json
-from mcp.server.fastmcp.server import FastMCP, Context
+from mcp.server.fastmcp.server import Context, FastMCP
 from pymilvus import (
-    MilvusClient,
-    DataType,
     AnnSearchRequest,
+    DataType,
+    MilvusClient,
     RRFRanker,
 )
 
@@ -228,7 +229,7 @@ class MilvusConnector:
         metric_type: str = "COSINE",
         field_schema: list[dict[str, Any]] = None,
         index_params: list[dict[str, Any]] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> bool:
         """
         Create a new collection with quick setup or customized schema.
@@ -262,12 +263,16 @@ class MilvusConnector:
                 "enable_dynamic_field": kwargs.get("enable_dynamic_field", True),
             }
             if "partition_key_isolation" in kwargs:
-                schema_kwargs["partition_key_isolation"] = kwargs["partition_key_isolation"]
+                schema_kwargs["partition_key_isolation"] = kwargs[
+                    "partition_key_isolation"
+                ]
 
             if field_schema is not None:
                 schema = MilvusClient.create_schema(**schema_kwargs)
                 for field_kwargs in field_schema:
-                    field_kwargs["datatype"] = getattr(DataType, field_kwargs["datatype"].upper())
+                    field_kwargs["datatype"] = getattr(
+                        DataType, field_kwargs["datatype"].upper()
+                    )
                     schema.add_field(**field_kwargs)
             else:
                 schema = None
@@ -287,7 +292,7 @@ class MilvusConnector:
                 metric_type=metric_type,
                 schema=schema,
                 index_params=built_index_params if index_params is not None else None,
-                **kwargs
+                **kwargs,
             )
 
             return True
@@ -844,7 +849,7 @@ async def milvus_create_collection(
     """
     try:
         connector = ctx.request_context.lifespan_context.connector
-        success = await connector.create_collection(
+        await connector.create_collection(
             collection_name=collection_name,
             auto_id=auto_id,
             dimension=dimension,
@@ -853,7 +858,7 @@ async def milvus_create_collection(
             metric_type=metric_type,
             field_schema=field_schema,
             index_params=index_params,
-            **(other_kwargs if other_kwargs is not None else {})
+            **(other_kwargs if other_kwargs is not None else {}),
         )
 
         return f"Collection '{collection_name}' created successfully"
@@ -916,7 +921,7 @@ async def milvus_load_collection(
     """
     try:
         connector = ctx.request_context.lifespan_context.connector
-        success = await connector.load_collection(
+        await connector.load_collection(
             collection_name=collection_name, replica_number=replica_number
         )
 
@@ -935,7 +940,7 @@ async def milvus_release_collection(collection_name: str, ctx: Context = None) -
     """
     try:
         connector = ctx.request_context.lifespan_context.connector
-        success = await connector.release_collection(collection_name=collection_name)
+        await connector.release_collection(collection_name=collection_name)
 
         return f"Collection '{collection_name}' released successfully"
     except Exception as e:
@@ -963,7 +968,7 @@ async def milvus_use_database(db_name: str, ctx: Context = None) -> str:
     """
     try:
         connector = ctx.request_context.lifespan_context.connector
-        success = await connector.use_database(db_name)
+        await connector.use_database(db_name)
 
         return f"Switched to database '{db_name}' successfully"
     except Exception as e:

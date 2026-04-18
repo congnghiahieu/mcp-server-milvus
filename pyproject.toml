@@ -8,7 +8,6 @@ dependencies = [
     "fastmcp>=2.14.1",
     "pymilvus>=2.5.1",
     "click>=8.0.0",
-    "ruff>=0.11.0",
     "python-dotenv>=1.0.0",
 ]
 
@@ -21,3 +20,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_server_milvus"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.10",
+]
